@@ -92,8 +92,19 @@ node server.js
 
 ```
 
-
 The server will start on `http://localhost:3000`.
+
+### Feedback email (Gmail app password)
+
+The feedback form sends mail through Gmail SMTP using Nodemailer. Set these server-side environment variables:
+
+```env
+GMAIL_USER=your-gmail-address@gmail.com
+GMAIL_APP_PASSWORD=your-google-app-password
+FEEDBACK_TO_EMAIL=your-feedback-inbox@gmail.com
+```
+
+Replace the example addresses with your own values. `FEEDBACK_TO_EMAIL` is optional; when omitted, feedback is sent to `GMAIL_USER`. Create the app password in your Google Account after enabling 2-Step Verification. Keep it private: store it only in your local `.env` file or your hosting provider's server-side environment settings. Never put it in frontend code or commit it. Gmail may restrict SMTP access on some hosting providers.
 
 ---
 

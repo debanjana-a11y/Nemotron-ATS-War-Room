@@ -16,6 +16,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const copyBulletsBtn = document.getElementById('copyBulletsBtn');
   const copyStatus = document.getElementById('copyStatus');
   const analysisError = document.getElementById('analysisError');
+  const feedbackForm = document.getElementById('feedbackForm');
+  const feedbackSubmit = document.getElementById('feedbackSubmit');
+  const feedbackStatus = document.getElementById('feedbackStatus');
 
   // Pre-filled sample data for quick testing and recording demos
   const SAMPLE_RESUME = `Software Engineer with 8+ years building high-throughput systems in C++ and Go.
@@ -34,6 +37,37 @@ Key Requirements:
   loadSampleBtn.addEventListener('click', () => {
     resumeInput.value = SAMPLE_RESUME;
     jdInput.value = SAMPLE_JD;
+  });
+
+  feedbackForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    feedbackStatus.textContent = '';
+    feedbackSubmit.disabled = true;
+    feedbackSubmit.textContent = 'Sending...';
+
+    try {
+      const formData = new FormData(feedbackForm);
+      const response = await fetch('/api/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(Object.fromEntries(formData)),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data.error || `Server returned HTTP ${response.status}`);
+      }
+
+      feedbackStatus.textContent = data.message || 'Thank you for your feedback.';
+      feedbackStatus.className = 'text-sm text-forest-700';
+      feedbackForm.reset();
+    } catch (err) {
+      console.error('Feedback submission failed:', err);
+      feedbackStatus.textContent = err instanceof Error ? err.message : 'Could not send feedback. Please try again later.';
+      feedbackStatus.className = 'text-sm text-red-700';
+    } finally {
+      feedbackSubmit.disabled = false;
+      feedbackSubmit.textContent = 'Send Feedback';
+    }
   });
 
   analyzeBtn.addEventListener('click', async () => {
@@ -104,7 +138,9 @@ Key Requirements:
     const rawScore = Number(evaluation.initial_score);
     const initialScore = Number.isFinite(rawScore) ? Math.min(Math.max(rawScore, 0), 100) : 0;
     const missingKeywords = Array.isArray(evaluation.missing_keywords) ? evaluation.missing_keywords : [];
-    const skillMatrix = Array.isArray(evaluation.skill_matrix) ? evaluation.skill_matrix : [];
+    const skillMatrix = Array.isArray(evaluation.skill_matrix)
+      ? [...evaluation.skill_matrix].sort((a, b) => (Number(b.match_pct) || 0) - (Number(a.match_pct) || 0))
+      : [];
     const deficitSkills = Array.isArray(evaluation.deficit_skills) ? evaluation.deficit_skills : [];
     const tailoring = data.tailoring || {};
     const optimizedBullets = Array.isArray(tailoring.tailored_bullets)
