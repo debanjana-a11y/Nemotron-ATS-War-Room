@@ -159,52 +159,64 @@ async function tailorForGaps(missingKeywords, deficitSkills, resumeSummary) {
     };
   }
 
-  const prompt = `You are an executive resume strategist.
-Target gaps identified:
-- Missing critical skills: ${missingKeywords.length > 0 ? missingKeywords.join(', ') : 'None'}
-- Tenure/depth deficits: ${deficitSkills.length > 0 ? deficitSkills.join(', ') : 'None'}
-
-Candidate Resume context:
+  const prompt = `Act as a truthful resume editor. Use only facts in the resume; never invent metrics, achievements, employers, or experience. Do not claim missing skills.
+Gaps: Missing: ${missingKeywords.join(', ') || 'None'}. Needs more depth: ${deficitSkills.join(', ') || 'None'}.
+Resume:
 ${resumeSummary.slice(0, 1000)}
+Return only one valid JSON object with exactly these fields: {"suggested_headline":"...","tailored_bullets":["...","..."]}.
+Write one concise headline and exactly 2 concise XYZ-style bullets (under 35 words each). If the resume has no metric, do not invent one.`;
 
-Instructions:
-1. Provide a professional headline positioning the candidate toward the target role without misrepresenting their core domain.
-2. Provide exactly 2 accomplishment bullets using Google's XYZ formula ("Accomplished [X] as measured by [Y] by doing [Z]").
-   - If skills are completely missing, bridge adjacent experience (e.g. networking socket programming to distributed streaming). Do NOT invent fake companies or jobs.
+  const usage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
+  let tailoring;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const response = await nebius.chat.completions.create({
+      model: MODEL_ID,
+      messages: [{
+        role: 'user',
+        content: attempt === 0
+          ? prompt
+          : `${prompt}\nYour previous output was incomplete or invalid. Return the required compact JSON now; do not add any other text.`,
+      }],
+      max_tokens: 900,
+      temperature: 0,
+    });
 
-Respond with valid JSON only:
-{"suggested_headline":"Title","tailored_bullets":["Bullet 1","Bullet 2"]}`;
+    usage.prompt_tokens += response.usage?.prompt_tokens || 0;
+    usage.completion_tokens += response.usage?.completion_tokens || 0;
+    usage.total_tokens += response.usage?.total_tokens || 0;
 
-  const response = await nebius.chat.completions.create({
-    model: MODEL_ID,
-    messages: [{ role: 'user', content: prompt }],
-    max_tokens: 1500,
-    temperature: 0.2,
-  });
+    const choice = response.choices[0];
+    const rawContent = choice?.message?.content || '';
+    try {
+      const cleaned = rawContent.replace(/```json/gi, '').replace(/```/g, '').trim();
+      const parsed = JSON.parse(cleaned);
+      if (
+        typeof parsed.suggested_headline === 'string'
+        && parsed.suggested_headline.trim()
+        && Array.isArray(parsed.tailored_bullets)
+        && parsed.tailored_bullets.length === 2
+        && parsed.tailored_bullets.every((bullet) => typeof bullet === 'string' && bullet.trim())
+      ) {
+        tailoring = {
+          suggested_headline: parsed.suggested_headline.trim(),
+          tailored_bullets: parsed.tailored_bullets.map((bullet) => bullet.trim()),
+        };
+        break;
+      }
+    } catch {
+      // Retry once with the same concise schema request.
+    }
 
-  const rawContent = response.choices[0]?.message?.content || '{}';
-
-  let tailoring = null;
-  try {
-    const cleaned = rawContent.replace(/```json/gi, '').replace(/```/g, '').trim();
-    tailoring = JSON.parse(cleaned);
-  } catch (e) {
-    const match = rawContent.match(/\{[\s\S]*\}/);
-    if (match) {
-      try { tailoring = JSON.parse(match[0]); } catch (err) {}
+    if (attempt === 1) {
+      break;
     }
   }
 
-  return {
-    tailoring: tailoring || {
-      suggested_headline: "Senior Backend & Infrastructure Engineer",
-      tailored_bullets: [
-        "Designed high-throughput communication protocols reducing latency by 20% across distributed microservices.",
-        "Engineered fault-tolerant backend workflows adhering to 99.99% availability requirements."
-      ]
-    },
-    usage: response.usage || { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }
-  };
+  if (!tailoring) {
+    throw new Error('The tailoring model did not return a complete headline and two bullets. Please retry the analysis.');
+  }
+
+  return { tailoring, usage };
 }
 
 // Unified Route

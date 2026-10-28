@@ -56,7 +56,8 @@ Key Requirements:
       });
 
       if (!response.ok) {
-        throw new Error(`Server returned HTTP ${response.status}`);
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Server returned HTTP ${response.status}`);
       }
 
       const data = await response.json();
@@ -109,6 +110,7 @@ Key Requirements:
     const optimizedBullets = Array.isArray(tailoring.tailored_bullets)
       ? tailoring.tailored_bullets
       : (Array.isArray(data.tailored_bullets) ? data.tailored_bullets : []);
+    const hasTailoring = Boolean(tailoring.suggested_headline || optimizedBullets.length);
 
     // Animate Score Counter
     animateScore(initialScore);
@@ -174,7 +176,9 @@ Key Requirements:
     if (optimizedBullets.length === 0) {
       const emptyState = document.createElement('p');
       emptyState.className = 'text-sm text-forest-600';
-      emptyState.textContent = 'No tailored bullets were returned.';
+      emptyState.textContent = hasTailoring
+        ? 'No tailored bullets were returned.'
+        : 'Tailoring was not returned. Please rerun the analysis; if it persists, update or restart the backend.';
       bulletsContainer.appendChild(emptyState);
     } else {
       optimizedBullets.forEach((bullet) => {
