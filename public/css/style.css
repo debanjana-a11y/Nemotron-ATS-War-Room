@@ -1,0 +1,71 @@
+/* Color Palette: Warm Beige & Deep Forest Green */
+:root {
+  --color-beige-bg: #FAF8F5;
+  --color-sand-50: #FFFFFF;
+  --color-sand-100: #F4EFE6;
+  --color-sand-200: #EADBCE;
+  --color-sand-300: #D8CBB9;
+  --color-forest-100: #E4ECE7;
+  --color-forest-200: #C2D5C8;
+  --color-forest-300: #93B39E;
+  --color-forest-600: #3E664F;
+  --color-forest-700: #2C4F3B;
+  --color-forest-800: #1B3B2B;
+  --color-forest-900: #0E2419;
+}
+
+body {
+  background-color: var(--color-beige-bg);
+}
+
+.bg-beige {
+  background-color: var(--color-beige-bg);
+}
+
+.bg-card {
+  background-color: var(--color-sand-100);
+}
+
+.bg-sand-50 {
+  background-color: var(--color-sand-50);
+}
+
+.bg-sand-200 {
+  background-color: var(--color-sand-200);
+}
+
+.border-sand-300 {
+  border-color: var(--color-sand-300);
+}
+
+.text-forest-900 {
+  color: var(--color-forest-900);
+}
+
+.text-forest-800 {
+  color: var(--color-forest-800);
+}
+
+.text-forest-700 {
+  color: var(--color-forest-700);
+}
+
+.text-forest-600 {
+  color: var(--color-forest-600);
+}
+
+.bg-forest-800 {
+  background-color: var(--color-forest-800);
+}
+
+.bg-forest-800:hover {
+  background-color: var(--color-forest-900);
+}
+
+.bg-forest-100 {
+  background-color: var(--color-forest-100);
+}
+
+.border-forest-300 {
+  border-color: var(--color-forest-300);
+}

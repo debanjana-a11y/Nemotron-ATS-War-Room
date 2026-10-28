@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nemotron ATS War-Room</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body class="bg-beige text-forest-900 font-sans antialiased min-h-screen selection:bg-forest-200">
+
+  <!-- Header -->
+  <header class="border-b border-sand-300 bg-sand-50/70 backdrop-blur sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-lg bg-forest-800 text-sand-50 flex items-center justify-center font-bold tracking-tight">
+          N
+        </div>
+        <div>
+          <h1 class="text-lg font-bold tracking-tight text-forest-900">Nemotron ATS War-Room</h1>
+          <p class="text-xs text-forest-600">Nebius Token Factory • Tiered Agent Pipeline</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-forest-100 text-forest-800 border border-forest-300">
+          <span class="w-2 h-2 rounded-full bg-forest-600 animate-pulse"></span>
+          Nebius Endpoints Online
+        </span>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-6 py-8">
+    <!-- Pipeline Tier Indicators -->
+    <section class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+      <div class="p-4 rounded-xl bg-card border border-sand-300 flex items-center gap-3">
+        <span class="w-8 h-8 rounded-full bg-sand-200 text-forest-800 flex items-center justify-center font-bold text-xs">1</span>
+        <div>
+          <p class="text-xs font-semibold uppercase tracking-wider text-forest-600">Nemotron 3.5 Lightning</p>
+          <p class="text-sm font-medium text-forest-900">Entity & Keyword Extraction</p>
+        </div>
+      </div>
+      <div class="p-4 rounded-xl bg-card border border-sand-300 flex items-center gap-3">
+        <span class="w-8 h-8 rounded-full bg-sand-200 text-forest-800 flex items-center justify-center font-bold text-xs">2</span>
+        <div>
+          <p class="text-xs font-semibold uppercase tracking-wider text-forest-600">Nemotron 3 Ultra (550B)</p>
+          <p class="text-sm font-medium text-forest-900">Adversarial ATS Screening</p>
+        </div>
+      </div>
+      <div class="p-4 rounded-xl bg-card border border-sand-300 flex items-center gap-3">
+        <span class="w-8 h-8 rounded-full bg-sand-200 text-forest-800 flex items-center justify-center font-bold text-xs">3</span>
+        <div>
+          <p class="text-xs font-semibold uppercase tracking-wider text-forest-600">Nemotron 3 Super (120B)</p>
+          <p class="text-sm font-medium text-forest-900">Google XYZ Bullet Optimization</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Inputs -->
+    <section class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+      <div class="flex flex-col gap-2">
+        <label for="resumeText" class="text-sm font-semibold text-forest-800">Candidate Resume (Plain Text / Bullets)</label>
+        <textarea id="resumeText" rows="9" class="w-full p-4 rounded-xl border border-sand-300 bg-card text-forest-900 placeholder-forest-400 focus:outline-none focus:ring-2 focus:ring-forest-600 text-sm leading-relaxed" placeholder="Paste current experience, skills, and past accomplishments here..."></textarea>
+      </div>
+      <div class="flex flex-col gap-2">
+        <label for="jdText" class="text-sm font-semibold text-forest-800">Target Job Description</label>
+        <textarea id="jdText" rows="9" class="w-full p-4 rounded-xl border border-sand-300 bg-card text-forest-900 placeholder-forest-400 focus:outline-none focus:ring-2 focus:ring-forest-600 text-sm leading-relaxed" placeholder="Paste the target job description, qualifications, and requirements..."></textarea>
+      </div>
+    </section>
+
+    <!-- CTA & Loading -->
+    <div class="flex flex-col sm:flex-row items-center justify-between gap-4 mb-10 pb-8 border-b border-sand-300">
+      <button id="loadSampleBtn" type="button" class="text-sm text-forest-700 hover:text-forest-900 font-medium underline underline-offset-4">
+        Load Senior Distributed Systems Sample
+      </button>
+
+      <button id="analyzeBtn" type="button" class="w-full sm:w-auto px-8 py-3 rounded-xl bg-forest-800 hover:bg-forest-900 text-sand-50 font-semibold tracking-wide transition shadow-sm hover:shadow flex items-center justify-center gap-2">
+        <span id="btnText" class="!text-white">Run Multi-Agent Screening</span>
+        <svg id="btnSpinner" class="hidden animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+        </svg>
+      </button>
+    </div>
+    <p id="analysisError" class="hidden mb-6 rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800" role="alert"></p>
+
+    <!-- Results Panel (Hidden Initially) -->
+    <div id="resultsWrapper" class="hidden space-y-8">
+      
+      <!-- Score & Rejection Banner -->
+      <section class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <!-- Initial Score Card -->
+        <div class="p-6 rounded-2xl bg-card border border-sand-300 flex flex-col justify-between">
+          <div>
+            <h2 class="text-xs font-semibold uppercase tracking-wider text-forest-600 mb-2">Raw ATS Compatibility</h2>
+            <div class="flex items-baseline gap-2">
+              <span id="scoreDisplay" class="text-5xl font-black text-forest-900">0</span>
+              <span class="text-xl font-bold text-forest-600">/ 100</span>
+            </div>
+          </div>
+          <div class="w-full bg-sand-200 h-2.5 rounded-full mt-4 overflow-hidden">
+            <div id="scoreBar" class="bg-forest-700 h-full rounded-full transition-all duration-700" style="width: 0%"></div>
+          </div>
+        </div>
+
+        <!-- Missing Keywords -->
+        <div class="p-6 rounded-2xl bg-card border border-sand-300 md:col-span-2">
+          <h2 class="text-xs font-semibold uppercase tracking-wider text-forest-600 mb-3">Critical Missing Competencies & Keywords</h2>
+          <div id="keywordsList" class="flex flex-wrap gap-2"></div>
+        </div>
+      </section>
+
+      <!-- Skill Evaluation -->
+      <section class="p-6 rounded-2xl bg-card border border-sand-300">
+        <h2 class="text-xs font-semibold uppercase tracking-wider text-forest-600 mb-3">Skill-by-Skill Evaluation</h2>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left">
+            <thead>
+              <tr class="text-xs uppercase tracking-wider text-forest-600">
+                <th class="px-3 py-2">Skill</th>
+                <th class="px-3 py-2">Candidate Level</th>
+                <th class="px-3 py-2">Target Level</th>
+                <th class="px-3 py-2">Match</th>
+              </tr>
+            </thead>
+            <tbody id="skillMatrixBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Experience Depth Gaps -->
+      <section class="p-6 rounded-2xl bg-card border border-sand-300">
+        <h2 class="text-xs font-semibold uppercase tracking-wider text-forest-600 mb-3">Experience Depth Gaps</h2>
+        <ul id="deficitSkillsList" class="space-y-2 text-sm text-forest-800 list-disc list-inside"></ul>
+      </section>
+
+      <!-- Tailored Recommendations -->
+      <section class="p-6 rounded-2xl bg-card border border-sand-300">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-xs font-semibold uppercase tracking-wider text-forest-600">Tailored Recommendations</h2>
+          <button id="copyBulletsBtn" type="button" class="text-xs font-semibold px-3 py-1.5 rounded-lg bg-sand-200 hover:bg-sand-300 text-forest-800 transition disabled:cursor-not-allowed">
+            Copy Optimized Bullets
+          </button>
+        </div>
+        <p id="suggestedHeadline" class="hidden mb-4 text-sm font-semibold text-forest-800"></p>
+        <div id="bulletsContainer" class="space-y-3"></div>
+        <p id="copyStatus" class="mt-3 text-xs text-forest-600" role="status" aria-live="polite"></p>
+      </section>
+
+    </div>
+    <!-- Token Usage Telemetry Bar -->
+    <div id="tokenTelemetry" class="hidden mt-6 p-4 rounded-xl bg-sand-200/50 border border-sand-300 flex flex-wrap items-center justify-between text-xs text-forest-800">
+      <div class="flex items-center gap-2">
+        <span class="w-2.5 h-2.5 rounded-full bg-forest-600"></span>
+        <span class="font-semibold">Nebius Token Telemetry:</span>
+        <span id="tokenBreakdown">Matrix: 0 | Tailor: 0</span>
+      </div>
+      <div>
+        <span class="font-bold text-forest-900 text-sm" id="tokenTotalDisplay">Total Tokens: 0</span>
+      </div>
+    </div>
+  </main>
+
+  <script src="js/app.js"></script>
+</body>
+</html>
