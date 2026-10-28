@@ -2,7 +2,7 @@ import express from 'express';
 import OpenAI from 'openai';
 import dotenv from 'dotenv';
 import cors from 'cors';
-import nodemailer from 'nodemailer';
+import { Resend } from 'resend';
 
 dotenv.config();
 
@@ -58,11 +58,10 @@ app.post('/api/feedback', async (req, res) => {
     }
   }
 
-  const { GMAIL_USER, GMAIL_APP_PASSWORD } = process.env;
-  const feedbackRecipient = process.env.FEEDBACK_TO_EMAIL || GMAIL_USER;
-  if (!GMAIL_USER || !GMAIL_APP_PASSWORD || !feedbackRecipient) {
+  const { RESEND_API_KEY, FEEDBACK_TO_EMAIL, FEEDBACK_FROM_EMAIL } = process.env;
+  if (!RESEND_API_KEY || !FEEDBACK_TO_EMAIL || !FEEDBACK_FROM_EMAIL) {
     feedbackSubmissions.delete(clientIp);
-    console.error('Feedback email is not configured. Set GMAIL_USER and GMAIL_APP_PASSWORD.');
+    console.error('Feedback email is not configured. Set RESEND_API_KEY, FEEDBACK_TO_EMAIL, and FEEDBACK_FROM_EMAIL.');
     return res.status(503).json({ error: 'Feedback email is not configured yet. Please try again later.' });
   }
 
@@ -75,21 +74,30 @@ app.post('/api/feedback', async (req, res) => {
   ].join('\n');
 
   try {
-    const transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: {
-        user: GMAIL_USER,
-        pass: GMAIL_APP_PASSWORD.replace(/\s+/g, ''),
-      },
-    });
-
-    await transporter.sendMail({
-      from: { name: 'ATS War Room Feedback', address: GMAIL_USER },
-      to: feedbackRecipient,
-      replyTo: trimmedEmail || undefined,
+    const resend = new Resend(RESEND_API_KEY);
+    const { error } = await resend.emails.send({
+      from: FEEDBACK_FROM_EMAIL,
+      to: [FEEDBACK_TO_EMAIL],
       subject: `ATS War Room feedback: ${trimmedCategory}`,
       text: emailText,
+      ...(trimmedEmail ? { replyTo: trimmedEmail } : {}),
     });
+
+    if (error) {
+      const providerStatus = error.statusCode;
+      console.error(`Feedback email provider rejected the request (${error.name || 'unknown'}).`);
+      feedbackSubmissions.delete(clientIp);
+      const errorMessage = providerStatus === 401
+        ? 'Email service rejected its API key. Check RESEND_API_KEY in Render.'
+        : providerStatus === 403
+          ? 'Email service denied this sender or recipient. Verify your sender domain and check Resend sending restrictions.'
+          : providerStatus === 400 || providerStatus === 422
+            ? 'Email service rejected the message configuration. Check FEEDBACK_FROM_EMAIL and the Resend sender requirements.'
+            : providerStatus === 429
+              ? 'Email service rate limit reached. Please try again later.'
+              : 'Email service is temporarily unavailable. Please try again later.';
+      return res.status(502).json({ error: errorMessage });
+    }
 
     return res.status(200).json({ message: 'Thank you for your feedback.' });
   } catch (err) {
