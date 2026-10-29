@@ -31,7 +31,7 @@ Most AI resume tailors suffer from two major flaws: they hallucinate fake work h
 
 ## How It Uses NVIDIA Models & Nebius Cloud
 
-* **Model: `nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B**`
+* **Model: `Nemotron-3.5-Lightning and Nemotron-3-Ultra-550b-a55b**`
 * We needed an LLM that respects strict JSON schemas, adheres to zero-temperature deterministic auditing rules, and doesn't inject unsolicited prose or markdown fences. Nemotron-3's instruction tuning handles complex ranking scales ($0$ to $4$) and structural constraints reliably without falling into JSON parsing errors.
 
 
