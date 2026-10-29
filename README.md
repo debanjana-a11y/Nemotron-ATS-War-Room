@@ -170,30 +170,28 @@ Configure these values in your local `.env` and your host's server-side environm
 ## Architecture & Logic Flow
 
 ```
-[Candidate Resume + Target JD]
-             │
-             ▼
-  ┌────────────────────────────────────────┐
-  │  Stage 1: evaluateMatrix()             │
-  │  - Extracts 5 core JD technical tools  │
-  │  - Audits career across all roles      │
-  │  - Strict JSON via Nemotron-3 (temp 0) │
-  └──────────────────┬─────────────────────┘
-                     │
-         Split Status Categorization
-         ├── Missing (Rank 0 / 0% match)
-         └── Deficit (Rank < Target)
-                     │
-                     ▼
-  ┌────────────────────────────────────────┐
-  │  Stage 2: tailorForGaps()              │
-  │  - Targets genuine gaps                │
-  │  - Bridges adjacent skills (No fluff)  │
-  │  - Formulates Google XYZ bullets       │
-  └──────────────────┬─────────────────────┘
-                     │
-                     ▼
-        [Final Structured Assessment]
+[Job Description] 
+       │
+       ▼ (Hop 1: Prompt-Engineered JD Extraction)
+[nvidia/Nemotron-3_5-Lightning] ────► Atomic Requirements Array
+                                             │
+[Candidate Resume] ──────────────────────────┼───────────────┐
+       │                                     │               │
+       ▼ (Hop 2: Prompt-Engineered Fact Audit)               │
+[nvidia/Nemotron-3_5-Lightning]                              │
+       │                                                     │
+       ▼ Raw Evidence Ranks (0-4)                            │
+[Pure JavaScript Math Engine] ◄──────────────────────────────┘
+       │ (100% Deterministic: Gap Sorting & Weighted Arithmetic)
+       ├────────────────────────┬────────────────────────────┐
+       ▼                        ▼                            ▼
+[Match Score %]       [Missing Skills: 0%]         [Deficit Skills: >0%]
+                                                             │
+                                                             ▼ (Hop 3: Constrained Synthesis)
+                                                [nvidia/Nemotron-3-Ultra-550b-a55b]
+                                                             │
+                                                             ▼
+                                                [Truthful XYZ Metric Bullets]
 
 ```
 
