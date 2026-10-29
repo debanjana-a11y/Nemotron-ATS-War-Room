@@ -3,7 +3,7 @@ Live: https://nemotron-ats-war-room.onrender.com/
 
 A deterministic ATS screener and automated career strategist built to bridge the gap between candidate resumes and modern engineering job descriptions.
 
-Most AI resume tailors suffer from two major flaws: they hallucinate fake work history to "beat" an ATS, or they confuse a lack of seniority with completely missing skills. This project decouples technical auditing from narrative tailoring. It uses **NVIDIA Nemotron-3-Nano-30B-A3B** hosted on **Nebius Token Factory** to score technical gaps with mathematical precision and generate grounded Google XYZ-formula bullets.
+Most AI resume tailors suffer from two major flaws: they hallucinate fake work history to "beat" an ATS, or they confuse a lack of seniority with completely missing skills. This project decouples technical auditing from narrative tailoring. It uses **Nemotron-3.5-Lightning** and **Nemotron-3-Ultra-550b-a55b**hosted on **Nebius Token Factory** to score technical gaps with mathematical precision and generate grounded Google XYZ-formula bullets.
 
 ---
 
