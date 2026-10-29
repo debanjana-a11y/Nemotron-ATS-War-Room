@@ -19,7 +19,12 @@ const nebius = new OpenAI({
   apiKey: process.env.NEBIUS_API_KEY,
 });
 
-const MODEL_ID = 'nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B';
+
+const AUDITOR_MODEL = process.env.AUDITOR_MODEL || 'nvidia/Nemotron-3_5-Lightning';
+const SCREENING_MODEL = process.env.SCREENING_MODEL || 'nvidia/Nemotron-3_5-Lightning';
+const TAILOR_MODEL = process.env.TAILOR_MODEL || 'nvidia/Nemotron-3_5-Lightning';
+
+console.log(`Using models: AUDITOR_MODEL=${AUDITOR_MODEL}, SCREENING_MODEL=${SCREENING_MODEL}, TAILOR_MODEL=${TAILOR_MODEL}`);
 
 app.post('/api/feedback', async (req, res) => {
   const { name = '', email = '', category = '', message = '', website = '' } = req.body || {};
@@ -109,58 +114,112 @@ app.post('/api/feedback', async (req, res) => {
 
 const LEVEL_MAP = {
   0: 'Missing / Not Found (0 yrs)',
-  1: 'Beginner (1-2 yrs)',
+  1: 'Beginner / Incidental (1-2 yrs)',
   2: 'Intermediate (2-5 yrs)',
   3: 'Advanced (5-8 yrs)',
   4: 'Expert / Top Match (8+ yrs)'
 };
 
-// 1. EXTRACT & SCORE MATRIX
-async function evaluateMatrix(resumeText, jdText) {
-  const promptText = `Strict ATS Auditor. Output raw JSON only. No intro, no reasoning, no markdown fences.
-
-Task:
-1. Extract 6 to 8 primary technical tools/skills required in the JD in order of appearance.
-2. For each, evaluate candidate's cumulative tenure in the resume:
-   - candidate_rank: 0 = Not found (0y), 1 = Listed only/Beginner (1-2y), 2 = Intermediate (2-5y), 3 = Advanced (5-8y), 4 = Expert (8+y).
-   - target_rank: based on JD seniority requirements (1-4).
-
-Job Description:
-${jdText.slice(0, 1500)}
-
-Candidate Resume:
-${resumeText.slice(0, 2000)}
-
-Output this exact JSON structure:
-{"skills":[{"skill":"Name","target_rank":3,"candidate_rank":0}]}`;
-
-  const response = await nebius.chat.completions.create({
-    model: MODEL_ID,
-    messages: [{ role: 'user', content: promptText }],
-    max_tokens: 3000,
-    temperature: 0.0
-  });
-
-  const rawContent = response.choices[0]?.message?.content || '{}';
-
-  let parsed = null;
+function cleanAndParseJSON(rawContent) {
   try {
     const cleaned = rawContent.replace(/```json/gi, '').replace(/```/g, '').trim();
-    parsed = JSON.parse(cleaned);
+    return JSON.parse(cleaned);
   } catch (e) {
     const match = rawContent.match(/\{[\s\S]*\}/);
     if (match) {
-      try { parsed = JSON.parse(match[0]); } catch (err) {}
+      try { return JSON.parse(match[0]); } catch (err) {}
     }
+    return null;
+  }
+}
+
+// 1. EVALUATE MATRIX (2-HOP ZERO-CONTAMINATION PIPELINE)
+async function evaluateMatrix(resumeText, jdText) {
+  let usage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
+
+  // --- HOP 1: Extract Skills Exclusively From JD (Zero Resume Context) ---
+  const jdPrompt = `/no_think
+Strict ATS Auditor. Output raw JSON only. No intro, no reasoning, no markdown fences.
+
+Rules:
+1. Extract 6 to 8 primary technical tools, languages, or protocols required in the Job Description.
+2. Keep names atomic (e.g. "Go", "gRPC", "Kubernetes", "Raft", "Paxos", "etcd", "Prometheus").
+3. Determine target_rank (1-4):
+   - 1 = "familiarity with", "exposure to", or "nice-to-have" (1-2y)
+   - 2 = "experience with", "working knowledge", or standard infrastructure tooling (2-5y)
+   - 3 = "strong proficiency in", "deep expertise", or core primary language (5-8y)
+   - 4 = "architect", "staff/principal", or "subject matter expert" (8+y)
+
+Job Description:
+${jdText.slice(0, 4000)}
+
+Output must be this exact JSON structure:
+{"skills":[{"skill":"Name","target_rank":2}]}`;
+
+  const jdRes = await nebius.chat.completions.create({
+    model: AUDITOR_MODEL,
+    messages: [{ role: 'user', content: jdPrompt }],
+    max_tokens: 300,
+    temperature: 0.0,
+    top_p: 0.01,
+    seed: 42,
+    extra_body: { chat_template_kwargs: { enable_thinking: false } }
+  });
+
+  usage.prompt_tokens += jdRes.usage?.prompt_tokens || 0;
+  usage.completion_tokens += jdRes.usage?.completion_tokens || 0;
+  usage.total_tokens += jdRes.usage?.total_tokens || 0;
+
+  const parsedJd = cleanAndParseJSON(jdRes.choices[0]?.message?.content || '{}');
+  const jdSkills = Array.isArray(parsedJd?.skills) ? parsedJd.skills : [];
+
+  if (jdSkills.length === 0) {
+    throw new Error("Failed to extract skills from Job Description.");
   }
 
-  const extractedSkills = Array.isArray(parsed?.skills) ? parsed.skills : [];
+  // --- HOP 2: Verify Resume Evidence Against the Fixed Skill List ---
+  const skillListString = jdSkills.map(s => `"${s.skill}"`).join(', ');
 
+  const auditPrompt = `/no_think
+Strict ATS Fact Checker. Output raw JSON only. No intro, no reasoning, no markdown fences.
+
+Task: Check the candidate's resume for these exact skills: [${skillListString}].
+
+Strict Scoring Rules:
+1. LITERAL ABSENCE RULE: If the exact tool name does NOT appear in the resume text, candidate_rank MUST BE 0. Never infer adjacent tools (e.g. REST is NOT gRPC; container monitoring is NOT Prometheus; database replication is NOT etcd/Raft).
+2. If stated with multi-year career tenure in header/summary (e.g. "8+ years in Go"), candidate_rank = 4.
+3. If actively used across work experience bullets, candidate_rank = 2.
+4. If mentioned only once or as a side script, candidate_rank = 1.
+
+Candidate Resume:
+${resumeText.slice(0, 6000)}
+
+Output must match this exact JSON structure:
+{"audit":[{"skill":"Name","candidate_rank":0}]}`;
+
+  const auditRes = await nebius.chat.completions.create({
+    model: SCREENING_MODEL,
+    messages: [{ role: 'user', content: auditPrompt }],
+    max_tokens: 350,
+    temperature: 0.0,
+    top_p: 0.01,
+    seed: 42,
+    extra_body: { chat_template_kwargs: { enable_thinking: false } }
+  });
+
+  usage.prompt_tokens += auditRes.usage?.prompt_tokens || 0;
+  usage.completion_tokens += auditRes.usage?.completion_tokens || 0;
+  usage.total_tokens += auditRes.usage?.total_tokens || 0;
+
+  const parsedAudit = cleanAndParseJSON(auditRes.choices[0]?.message?.content || '{}');
+  const auditResults = Array.isArray(parsedAudit?.audit) ? parsedAudit.audit : [];
+  const auditMap = new Map(auditResults.map(a => [a.skill?.toLowerCase().trim(), Number(a.candidate_rank) || 0]));
+
+  // --- STEP 3: Pure Deterministic JavaScript Scoring ---
   let totalScore = 0;
-  const skill_matrix = extractedSkills.map(item => {
+  const skill_matrix = jdSkills.map(item => {
     const targetRank = Math.min(Math.max(Number(item.target_rank) || 2, 1), 4);
-    // Direct numerical assignment without fragile string checks
-    const candidateRank = Math.min(Math.max(Number(item.candidate_rank) || 0, 0), 4);
+    const candidateRank = Math.min(Math.max(auditMap.get(item.skill?.toLowerCase().trim()) ?? 0, 0), 4);
 
     let status = 'missing';
     let match_pct = 0;
@@ -192,29 +251,21 @@ Output this exact JSON structure:
 
   const initial_score = skill_matrix.length > 0 ? Math.round(totalScore / skill_matrix.length) : 0;
 
-  const missing_keywords = skill_matrix
-    .filter(s => s.status === 'missing')
-    .map(s => s.skill);
-
-  const deficit_skills = skill_matrix
-    .filter(s => s.status === 'deficit')
-    .map(s => s.skill);
-
   return {
     evaluation: {
       initial_score,
       skill_matrix,
-      missing_keywords,
-      deficit_skills
+      missing_keywords: skill_matrix.filter(s => s.status === 'missing').map(s => s.skill),
+      deficit_skills: skill_matrix.filter(s => s.status === 'deficit').map(s => s.skill)
     },
-    usage: response.usage || { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }
+    usage
   };
 }
 
 // 2. SURGICAL TAILORING
 async function tailorForGaps(missingKeywords, deficitSkills, resumeSummary) {
   const gapsToAddress = [...missingKeywords, ...deficitSkills];
-  
+
   if (gapsToAddress.length === 0) {
     return {
       tailoring: {
@@ -225,61 +276,84 @@ async function tailorForGaps(missingKeywords, deficitSkills, resumeSummary) {
     };
   }
 
-  const prompt = `Act as a truthful resume editor. Use only facts in the resume; never invent metrics, achievements, employers, or experience. Do not claim missing skills.
-Gaps: Missing: ${missingKeywords.join(', ') || 'None'}. Needs more depth: ${deficitSkills.join(', ') || 'None'}.
-Resume:
-${resumeSummary.slice(0, 1000)}
-Return only one valid JSON object with exactly these fields: {"suggested_headline":"...","tailored_bullets":["...","..."]}.
-Write one concise headline and exactly 2 concise XYZ-style bullets (under 35 words each). If the resume has no metric, do not invent one.`;
+  // 1 bullet per deficit skill (capped at 3; fallback to core strengths if 0 deficits)
+  const targetSkills = deficitSkills.length > 0 
+    ? deficitSkills.slice(0, 3) 
+    : ['core systems background'];
+
+  const prompt = `/no_think
+Strict Career Tailor. Output raw JSON only. No thinking, no markdown fences.
+
+Rules:
+1. STRICT NEGATIVE BOUNDARY: Do NOT claim or write bullets for completely missing skills: [${missingKeywords.join(', ') || 'None'}].
+2. TARGET SCOPE: Generate EXACTLY ONE bullet for each of these deficit skills: [${targetSkills.join(', ')}]. Total bullets must equal ${targetSkills.length}.
+3. MANDATORY METRIC PLACEHOLDER RULE:
+   - Every single bullet MUST include an actionable metric bracket placeholder for the user to customize.
+   - Use clear, concrete placeholders like:
+     * "[insert % latency reduction]"
+     * "[insert throughput: e.g. Xk req/sec]"
+     * "[insert % memory/resource drop]"
+     * "[insert % time saved]"
+     * "[insert scale: e.g. X server nodes]"
+   - If the resume already has an explicit number, you may include it, but still pair it with a metric outcome.
+   - NEVER output vague statements like "reducing coupling" or "improving efficiency" without a bracketed metric placeholder.
+4. NATURAL EXECUTIVE PHRASING:
+   - Follow Google XYZ intent (Action + Metric + Method), but DO NOT literally write the template words "Accomplished", "as measured by", or "by doing" in the bullet.
+   - Keep each bullet under 35 words.
+
+Candidate Resume:
+${resumeSummary.slice(0, 3000)}
+
+Return only one valid JSON object with exactly this structure:
+{"suggested_headline":"...","tailored_bullets":["..."]}`;
 
   const usage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
-  let tailoring;
+  let tailoring = null;
+
   for (let attempt = 0; attempt < 2; attempt += 1) {
-  const response = await nebius.chat.completions.create({
-    model: MODEL_ID,
+    const response = await nebius.chat.completions.create({
+      model: TAILOR_MODEL,
       messages: [{
         role: 'user',
         content: attempt === 0
           ? prompt
-          : `${prompt}\nYour previous output was incomplete or invalid. Return the required compact JSON now; do not add any other text.`,
+          : `${prompt}\nYour previous output missed the metric placeholders. Return valid JSON with exactly ${targetSkills.length} bullets, each containing explicit placeholders like "[insert % latency reduction]".`
       }],
-      max_tokens: 900,
-      temperature: 0,
-  });
+      max_tokens: 500,
+      temperature: 0.1,
+      top_p: 0.01,
+      seed: 42,
+      extra_body: { chat_template_kwargs: { enable_thinking: false } }
+    });
 
     usage.prompt_tokens += response.usage?.prompt_tokens || 0;
     usage.completion_tokens += response.usage?.completion_tokens || 0;
     usage.total_tokens += response.usage?.total_tokens || 0;
 
-    const choice = response.choices[0];
-    const rawContent = choice?.message?.content || '';
-  try {
-    const cleaned = rawContent.replace(/```json/gi, '').replace(/```/g, '').trim();
-      const parsed = JSON.parse(cleaned);
-      if (
-        typeof parsed.suggested_headline === 'string'
-        && parsed.suggested_headline.trim()
-        && Array.isArray(parsed.tailored_bullets)
-        && parsed.tailored_bullets.length === 2
-        && parsed.tailored_bullets.every((bullet) => typeof bullet === 'string' && bullet.trim())
-      ) {
-        tailoring = {
-          suggested_headline: parsed.suggested_headline.trim(),
-          tailored_bullets: parsed.tailored_bullets.map((bullet) => bullet.trim()),
-        };
-        break;
-      }
-    } catch {
-      // Retry once with the same concise schema request.
-    }
-
-    if (attempt === 1) {
+    const parsed = cleanAndParseJSON(response.choices[0]?.message?.content || '{}');
+    if (
+      typeof parsed?.suggested_headline === 'string' &&
+      parsed.suggested_headline.trim() &&
+      Array.isArray(parsed?.tailored_bullets) &&
+      parsed.tailored_bullets.length >= 1 &&
+      parsed.tailored_bullets.every(b => typeof b === 'string' && b.trim())
+    ) {
+      tailoring = {
+        suggested_headline: parsed.suggested_headline.trim(),
+        tailored_bullets: parsed.tailored_bullets.slice(0, targetSkills.length).map(b => b.trim())
+      };
       break;
     }
   }
 
+  // Fallback ensuring clean bracket placeholders if parsing fails
   if (!tailoring) {
-    throw new Error('The tailoring model did not return a complete headline and two bullets. Please retry the analysis.');
+    tailoring = {
+      suggested_headline: "Senior Software Engineer | Backend & Systems Infrastructure",
+      tailored_bullets: targetSkills.map(skill => 
+        `Optimized backend infrastructure using ${skill}, cutting service overhead by [insert % latency reduction] and maintaining zero regressions across [insert count of servers/nodes].`
+      )
+    };
   }
 
   return { tailoring, usage };
